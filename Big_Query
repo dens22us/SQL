@@ -72,7 +72,6 @@ from `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
 group by 1
 order by 3 desc
 limit 10000;
-
 --------find out user which did most purchases, and which is this % of total revenue ----
 select
 user_pseudo_id,
@@ -133,7 +132,6 @@ select
 week_.week, round(week_.week_AOV,2), total_.AOV
 from week_ , total_
 order by 1;
-
 --------------------------Total users in a week, number of purchases every week, revenue per week, items count-----------
 select
 date_trunc(date(timestamp_micros(event_timestamp)),week) as week,
