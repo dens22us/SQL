@@ -1,0 +1,4 @@
+-- Розділення речення  в стовбці на складові через розділюючий знак ‘ ; ‘ 
+SELECT unnest(string_to_array(categories, ';')) AS category,
+          review_count
+   FROM yelp_business
