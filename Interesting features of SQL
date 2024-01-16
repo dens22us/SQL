@@ -131,3 +131,43 @@ select job_title, salary
 from cte
 where rnk <=3 and  count_>3
 order by 1 asc, 2 desc 
+
+--------------HARD TASK WITH USING ONLY WINDOWS FUNCTION-------------------------------------------------------------------------
+/* INPUT    OUTPUT
+ * Null			4
+ * 4			4
+ * Null			10
+ * Null			10
+ * Null			10
+ * Null			10
+ * Null			10
+ * 10			10
+ * Null			3
+ * Null			3
+ * Null			3
+ * 3			3
+ */
+CREATE TABLE your_table (your_column numeric);
+INSERT INTO your_table VALUES (NULL);
+INSERT INTO your_table VALUES (4);
+INSERT INTO your_table VALUES (NULL);
+INSERT INTO your_table VALUES (NULL);
+INSERT INTO your_table VALUES (NULL);
+INSERT INTO your_table VALUES (NULL);
+INSERT INTO your_table VALUES (NULL);
+INSERT INTO your_table VALUES (10);
+INSERT INTO your_table VALUES (NULL);
+INSERT INTO your_table VALUES (NULL);
+INSERT INTO your_table VALUES (NULL);
+INSERT INTO your_table VALUES (3);
+
+with cte_row as(
+select your_column, row_number() over(partition by (select null)) as row_
+from your_table
+), cte2 as (
+select your_column, row_, count(your_column) over (order by row_ desc) as gpr
+from cte_row
+)
+select your_column, row_, gpr, sum(your_column) over (partition by gpr)
+from cte2
+order by row_
