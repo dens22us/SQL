@@ -116,3 +116,18 @@ select a.user_id,
                                                     over (partition by a.user_id))/30) as Activity_month_number
 from public.activity a join public.active_users au  on a.user_id = au.user_id
 -------------------------------------------------------------------------------
+
+/* Знайдіть три найвищі зарплати для кожного відділу, але виведіть тільки ті відділи, 
+ де кількість працівників зарплата яких вища за середню зарплату в цьому відділі, перевищує 3 особи.
+ */
+with cte as (
+select job_title, salary,
+row_number() over (partition by job_title order by salary desc) as rnk,
+count(salary) over (partition by job_title) as count_
+from public.ds_salaries p2
+where salary >= (select avg(salary) from public.ds_salaries p1 where p1.job_title = p2.job_title )
+)
+select job_title, salary
+from cte
+where rnk <=3 and  count_>3
+order by 1 asc, 2 desc 
