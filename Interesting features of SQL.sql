@@ -171,3 +171,15 @@ from cte_row
 select your_column, row_, gpr, sum(your_column) over (partition by gpr)
 from cte2
 order by row_
+
+/*
+Given a table of tweet data over a specified time period, calculate the 3-day 
+rolling average of tweets for each user. Output the user ID, 
+tweet date, and rolling averages rounded to 2 decimal places.
+*/
+
+
+SELECT user_id, tweet_date, 
+round(avg(tweet_count) over (partition by user_id ORDER BY tweet_date ROWS BETWEEN 2 PRECEDING AND 0 FOLLOWING),2)
+FROM tweets
+order by user_id asc, tweet_date
