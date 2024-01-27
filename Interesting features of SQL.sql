@@ -2,6 +2,69 @@
 SELECT unnest(string_to_array(categories, ';')) AS category,
           review_count
    FROM yelp_business
+------------------------------------------------------------------------------------------------------
+/* Є наступні массиви чисел, з'єднати їх у один массив та найти медіану
+ * '1,2,3,43,4,3,2,56,77,33,2,33,5'
+ * '1,2,3,43,4,3,2,56,77,33,2,33,5'
+ * '43,2,3,43,2,3,2,56,77,67,2,34,5'
+ * '1,2,33,43,4,32,2,56,77,3,2,33,5'
+ */
+--CREATE TABLE unnest_test (numbers varchar)
+
+insert into unnest_test values ('1,2,3,43,4,3,2,56,77,33,2,33,5');
+insert into unnest_test values ('1,2,3,43,4,3,2,56,77,33,2,33,5');
+insert into unnest_test values ('43,2,3,43,2,3,2,56,77,67,2,34,5');
+insert into unnest_test values ('1,2,33,43,4,32,2,56,77,3,2,33,5');
+
+with cte as(
+	select unnest(string_to_array(numbers,',')) as numbers
+	from unnest_test
+), cte2 as (
+	select numbers,
+		row_number () over (order by numbers) as down,
+		row_number () over (order by numbers desc) as up
+	from cte
+)
+select round(avg(numbers::numeric))
+from cte2
+where down = round((select max(down) from cte2)::numeric/2) 
+			or up = round((select max(up) from cte2)::numeric/2);
+
+
+--------------------------Задачка складності HARD з використанням генерації--------------------------------------------------
+/*
+Google's marketing team is making a Superbowl commercial and needs a simple 
+statistic to put on their TV ad: the median number of searches a person made last year.
+
+However, at Google scale, querying the 2 trillion searches is too costly. Luckily,
+ you have access to the summary table (generation) which tells you the number of searches made last year and 
+ how many Google users fall into that bucket.
+
+Write a query to report the median of searches made by a user. Round the median to one decimal point.
+*/
+create table generation (searches numeric, num_users numeric);
+
+insert into generation values (2, 3); 
+insert into generation values (4, 1); 
+insert into generation values (6, 7); 
+insert into generation values (7, 4); 
+insert into generation values (9, 8);
+
+with cte as (
+	select searches
+	from generation
+	group by searches, GENERATE_SERIES(1, num_users)
+), cte2 as(
+	select searches,
+		row_number() over (order by searches) as down,
+		row_number() over (order by searches) as up,
+		count(searches) over () as cnt
+	from cte
+)
+select round(avg(searches),1)
+from cte2
+where down = round(cnt/2) or up = round(cnt/2)
+
 
 ---------------перетворення значеннь 1 колонці в колонці значень  ---------------------------------------------------------------------
 with t as(
