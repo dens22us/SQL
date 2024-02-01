@@ -1,3 +1,20 @@
+------------------------------Retention rate for unique cohort of users(acive in 2022-03-01) from  2022-03-01 to 2022-12-01 -------------
+with cte as(
+select distinct user_id 
+from activity
+where date(date_trunc('month', activity_date::date)) = '2022-03-01'
+),cte2 as(
+select date(date_trunc('month', activity_date::date)) as active_month, count(distinct a.user_id) as cnt
+from activity a join cte on a.user_id = cte.user_id
+group by 1
+order by 1 
+)
+select active_month, 
+(round(cnt::numeric/(select count(distinct user_id) from 
+		activity where date(date_trunc('month', activity_date::date)) = '2022-03-01'),2)*100)::varchar||'%' as retention_rate
+from cte2
+
+
 -- Розділення речення  в стовбці на складові через розділюючий знак ‘ ; ‘ 
 SELECT unnest(string_to_array(categories, ';')) AS category,
           review_count

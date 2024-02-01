@@ -1,3 +1,22 @@
+---------Do the 20% of best users made 80% of total revenue? (Paretto principle)-----
+with cte as(
+      select user_pseudo_id, sum(ecommerce.purchase_revenue_in_usd) as user_revenue
+      from `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+      where event_name = 'purchase'
+      group by 1
+), cte2 as(
+      select user_pseudo_id, user_revenue,
+            sum(user_revenue) over (order by user_revenue desc) as run_sum,
+            row_number() over (order by user_revenue desc) as user_number,
+            count(user_pseudo_id) over () as total_count, --4419
+            sum(user_revenue) over () as total_sum --362165.0
+      from cte
+      order by 2 desc
+)
+      select round(run_sum*100/total_sum,2) as Must_be_80_percent --(but only 56,6%)
+      from cte2
+      where user_number = round(total_count/5);
+
 ----------Top 20 users by number of purchases-----method #1----
 select
 user_pseudo_id,
