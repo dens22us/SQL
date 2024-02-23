@@ -1,3 +1,34 @@
+---------------------Retention rate of GA sample--------------------
+with cte as (
+select
+distinct user_pseudo_id,
+date(date_trunc(timestamp_micros(event_timestamp),week)) as active_week,
+min(date(date_trunc(timestamp_micros(event_timestamp),week))) over (partition by user_pseudo_id) as first_active_week,
+DATE_DIFF(date(date_trunc(timestamp_micros(event_timestamp),week)), min(date(date_trunc(timestamp_micros(event_timestamp),week))) over (partition by user_pseudo_id), week) as active_week_number
+from `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+order by 1
+)
+select first_active_week,
+    sum(case when active_week_number = 0 then 1 else 0 end) as m0,
+    sum(case when active_week_number = 1 then 1 else 0 end) as m1,
+    sum(case when active_week_number = 2 then 1 else 0 end) as m2,
+    sum(case when active_week_number = 3 then 1 else 0 end) as m3,
+    sum(case when active_week_number = 4 then 1 else 0 end) as m4,
+    sum(case when active_week_number = 5 then 1 else 0 end) as m5,
+    sum(case when active_week_number = 6 then 1 else 0 end) as m6,
+    sum(case when active_week_number = 7 then 1 else 0 end) as m7,
+    sum(case when active_week_number = 8 then 1 else 0 end) as m8,
+    sum(case when active_week_number = 9 then 1 else 0 end) as m9,
+    sum(case when active_week_number = 10 then 1 else 0 end) as m10,
+    sum(case when active_week_number = 11 then 1 else 0 end) as m11,
+    sum(case when active_week_number = 12 then 1 else 0 end) as m12,
+    sum(case when active_week_number = 13 then 1 else 0 end) as m13
+    from cte
+    group by 1
+    order by 1;
+
+
+
 ---------Do the 20% of best users made 80% of total revenue? (Paretto principle)-----
 with cte as(
       select user_pseudo_id, sum(ecommerce.purchase_revenue_in_usd) as user_revenue
