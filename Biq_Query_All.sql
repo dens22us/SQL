@@ -1,3 +1,16 @@
+----------------Constructing Nested queries-------------------
+with cte as (
+select date(date_trunc(timestamp_micros(event_timestamp), day)) as date_, user_pseudo_id, event_name
+from `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+where (_TABLE_SUFFIX BETWEEN '20210101' AND '20210105') 
+order by 1
+)
+select date_, user_pseudo_id
+, array_agg((select as struct c.* except(date_, user_pseudo_id))  order by date_) as events
+from cte c
+group by date_, user_pseudo_id
+
+
 ---------------------Retention rate of GA sample--------------------
 with cte as (
 select
