@@ -1,3 +1,218 @@
+---------------All metrics for E-commerce each month-----
+with cte as (
+  select date(date_trunc(timestamp_micros(event_timestamp),month)) as month ,
+    user_pseudo_id, event_name, event_value_in_usd,user_ltv.revenue as  user_ltv_revenue
+  from `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+), month_revenue as(
+  select month, sum(event_value_in_usd) as revenue
+  from cte
+  where event_name = 'purchase'
+  group by 1
+), funnel as (
+  select month, sum(case when event_name = 'session_start' then 1 end) as session_start, 
+              sum(case when event_name = 'view_item' then 1 end) as view_item,
+              sum(case when event_name = 'add_to_cart' then 1 end) as add_to_cart,
+              sum(case when event_name = 'purchase' then 1 end) as purchase
+  from cte
+  group by 1
+  order by 1
+), CR as (
+  select month, 
+      round(sum(case when event_name = 'purchase' then 1 end)*100/sum(case when event_name = 'session_start' then 1 end),2) as ConvRate
+  from cte
+  group by 1
+), AOV1 as (
+  select month, round(avg(event_value_in_usd)) as AOV
+  from cte
+  where event_name = 'purchase'
+  group by 1
+) ,Repeat_Purchase_Rate1  as (
+  select month, user_pseudo_id, count(event_value_in_usd) as count_purchase
+  from cte
+  where event_name = 'purchase'
+  group by 1,2
+), Repeat_Purchase_Rate2 as (
+  select month, round(sum(case when count_purchase>1 then 1 end)*100/count(user_pseudo_id),2) as Repeat_Purchase_Rate
+  from Repeat_Purchase_Rate1
+  group by 1
+  order by 1
+), Cart_Abandonment_Rate1 as (
+ select month, round((sum(case when event_name = 'add_to_cart' then 1 end) - sum(case when event_name = 'purchase' then 1 end))*100/
+                (sum(case when event_name = 'add_to_cart' then 1 end)),2) as Cart_Abandonment_Rate
+  from cte
+  group by 1
+), LTV1 as (
+  select month, round(avg(user_ltv_revenue),2) as ltv
+  from cte
+  where event_name = 'purchase'
+  group by 1
+), all_ as (
+  select month_revenue.month as month, revenue, session_start, view_item, add_to_cart, purchase,
+    ConvRate, AOV,Repeat_Purchase_Rate, Cart_Abandonment_Rate, ltv
+  from month_revenue join funnel on funnel.month = month_revenue.month
+                  join CR on month_revenue.month = CR.month
+                  join AOV1 on month_revenue.month = AOV1.month
+                  join Repeat_Purchase_Rate2 on month_revenue.month = Repeat_Purchase_Rate2.month
+                  join Cart_Abandonment_Rate1 on month_revenue.month = Cart_Abandonment_Rate1.month
+                  join LTV1 on month_revenue.month = LTV1.month
+order by 1 
+)
+select cast(month as string) as date_, revenue, session_start, view_item, add_to_cart, purchase,ConvRate, AOV,Repeat_Purchase_Rate, Cart_Abandonment_Rate, ltv
+from all_
+union all
+select 'All three month', sum(revenue), sum(session_start), sum (view_item), sum(add_to_cart), sum(purchase),
+  round(avg(ConvRate),2), avg(AOV), round(avg(Repeat_Purchase_Rate),2), round(avg(Cart_Abandonment_Rate),2), round(avg(ltv),2)
+  from all_
+  group by 1
+  order by 1
+
+----------------------------Query for LTV forecast----------
+with cte as (
+select user_pseudo_id, count(event_value_in_usd) as frequency, 
+min(date(timestamp_micros(event_timestamp))) as min_, 
+max(date(timestamp_micros(event_timestamp))) as max_,
+round(avg(event_value_in_usd),1) as average_transaction_size,
+sum(event_value_in_usd) as revenue
+from `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+where event_name = 'purchase'
+group by 1
+order by 2 desc
+)
+select user_pseudo_id, frequency, 
+date_diff((select max(date(timestamp_micros(event_timestamp))) from `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`),max_, day) as days_since_last_transaction,
+date_diff((select max(date(timestamp_micros(event_timestamp))) from `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`), min_, day) as days_since_first_transaction,
+average_transaction_size, revenue
+from cte
+where frequency>1
+order by 2 desc;
+
+----------------------different ways to count purchases---------
+select 'event_value_in_usd' as type, count(event_value_in_usd) as count_
+from `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+union all
+select 'ecommerce.purchase_revenue', count(ecommerce.purchase_revenue)
+from `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+union all
+select 'ecommerce.purchase_revenue_event_purchase', count(ecommerce.purchase_revenue)
+from `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+where event_name = 'purchase'
+union all
+select 'user_ltv.revenue', count(distinct user_ltv.revenue||(select value.int_value from unnest (event_params) where key = 'ga_session_id'))
+from `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+where user_ltv.revenue <> 0;
+
+-------compare event_count of those who done purchase with those who didn`t----
+with cte as (
+select 'customers' as user_type, round(count(event_name)/count(distinct user_pseudo_id)) as avg_events_per_user, count(distinct user_pseudo_id) as users_count
+from `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+where user_ltv.revenue <> 0 
+union all
+select 'non customers', round(count(event_name)/count(distinct user_pseudo_id)) as avg_events_per_user, count(distinct user_pseudo_id) as users_count
+from `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+where user_ltv.revenue = 0
+)
+select  user_type, avg_events_per_user, users_count, round(users_count/(lead(users_count,1) over(order by user_type))*100,2) as Conversion_rate,
+round((min(users_count) over ())/(max(users_count) over ())*100,2) as Conversion_rate
+from cte;
+
+------------client's card (using array_agg) which done purchases------------
+with cte as (
+select row_number() over (partition by user_pseudo_id order by event_timestamp) as event_id,  date(timestamp_micros(event_timestamp)) as event_timestamp, time(timestamp_micros(event_timestamp)) as time, user_pseudo_id
+, date(date_trunc(timestamp_micros(event_timestamp),day)) as date, event_name
+, (select value.int_value from unnest (event_params) where key = 'ga_session_id') as session_id
+, date(timestamp_micros(user_first_touch_timestamp)), device.category, geo.country, user_ltv.revenue 
+, ecommerce.purchase_revenue, traffic_source.name, traffic_source.source, 
+from `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+where user_ltv.revenue <> 0 
+and user_pseudo_id = '4484520.5210961028' and event_name = 'purchase'
+)
+select user_pseudo_id, array_agg((select as struct c.* except(user_pseudo_id) )order by event_timestamp ) as client_card
+from cte c
+group by user_pseudo_id;
+
+-----------------Using Max by , CountIf----
+select max_by(user_pseudo_id, user_ltv.revenue) as user_max_ltv, max_by(user_ltv.revenue, user_ltv.revenue) as max_ltv,
+max_by(user_pseudo_id,ecommerce.purchase_revenue) as user_max_revenue, max_by(ecommerce.purchase_revenue,ecommerce.purchase_revenue) as max_revenue,
+countif( user_ltv.revenue>100), countif(user_ltv.revenue<100)
+from `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+where event_name = 'purchase';
+
+-----------------------------------current_date()-------
+select current_date(), current_date()-1, current_datetime('America/Chicago');
+
+------------------------------------Paretto priceple, avg and median ltv of clients------
+with cte as(
+select user_pseudo_id, max(user_ltv.revenue) as ltv,  sum(ecommerce.purchase_revenue) as revenue
+from `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+where event_name = 'purchase'
+group by 1
+), cte2 as (
+select user_pseudo_id, ltv, ntile(100) over (order by ltv desc) as rnk,
+row_number() over (order by ltv) as median_rnk
+from cte
+order by 2 desc
+), cte3 as (
+select sum(case when rnk <= 20 then ltv end) as highest_20_Precent,  sum(case when rnk > 20 then ltv end) as rest_80_percent
+, avg(ltv) as avg_ltv_per_user, avg(case when rnk=50 then ltv end) as median, max(median_rnk) as max_median_rnk
+from cte2
+)
+select highest_20_Precent, rest_80_percent, avg_ltv_per_user, median, (select ltv from cte2 where median_rnk = (select round(max_median_rnk/2) from cte3))
+from cte3;
+
+-------Comparison of users which buyers and not buyers by country---
+with cte as (
+select geo.country, count(distinct user_pseudo_id) as cnt
+from `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+where user_pseudo_id not in (select user_pseudo_id
+                    from `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+                      where event_name = 'purchase')
+group by 1
+), cte2 as (
+select country, cnt as cntnb, round(cnt/(select sum(cnt) from cte)*100,2) as non_buyers
+from cte
+), cte3 as (
+select geo.country, count(distinct user_pseudo_id) as cnt
+from `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+where event_name = 'purchase'
+group by 1
+)
+select cte2.country,cte3.cnt as cntb, cntnb, round(cte3.cnt/(select sum(cnt) from cte3)*100,2) as buyers, non_buyers,
+round(cte3.cnt/cntnb*100,2) as convertion_rate
+from cte3 join cte2 on cte3.country = cte2.country;
+
+-------Comparison of users which buyers and not buyers by device category---
+with cte as (
+select device.category, count(distinct user_pseudo_id) as cnt
+from `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+where user_pseudo_id not in (select user_pseudo_id
+                    from `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+                      where event_name = 'purchase')
+group by 1
+), cte2 as (
+select category, round(cnt/(select sum(cnt) from cte)*100,2) as non_buyers
+from cte
+), cte3 as (
+select device.category, count(distinct user_pseudo_id) as cnt
+from `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+where event_name = 'purchase'
+group by 1
+)
+select cte2.category, round(cnt/(select sum(cnt) from cte3)*100,2) as buyers, non_buyers
+from cte3 join cte2 on cte3.category = cte2.category;
+
+------------------------LTV per cohort____ARPPU*LT
+with cte as (
+select user_pseudo_id, min(date_trunc(date(timestamp_micros(event_timestamp)), week)) as First_week, max(date(timestamp_micros(event_timestamp))) as Last_day_, sum(ecommerce.purchase_revenue) as revenue
+from `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+where event_name = 'purchase'
+group by 1
+)
+select First_week,  avg(date_diff(Last_day_,First_week, week)) as LT, sum(revenue)/count(user_pseudo_id) as ARPPU, count(user_pseudo_id) as new_costumers,
+round(avg(date_diff(Last_day_,First_week, week))*sum(revenue)/count(user_pseudo_id),2) as LTV
+from cte
+group by 1
+order by 1;
+
 ----------------Constructing Nested queries-------------------
 with cte as (
 select date(date_trunc(timestamp_micros(event_timestamp), day)) as date_, user_pseudo_id, event_name
