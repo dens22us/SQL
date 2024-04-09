@@ -1,3 +1,11 @@
+-----------Check if odd number or not odd (четные и нечетные)------
+select *
+from cinema
+--where mod(id,2)<>0 and description <> 'boring' --Variant 1 Остаток от деления если не равен 0
+where id % 2 <> 0 and description <> 'boring' -- Variant 2
+order by rating desc
+
+
 ------------------------------Retention rate for unique cohort of users(acive in 2022-03-01) from  2022-03-01 to 2022-12-01 -------------
 with cte as(
 select distinct user_id 
